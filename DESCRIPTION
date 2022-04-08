@@ -1,0 +1,16 @@
+Package: envlpaster
+Title: Enveloping the Aster Model
+Version: 0.0.0.9000
+Author: Daniel J. Eck <dje13@illinois.edu>, Sicong He<sicongh3@illinois.edu>
+Maintainer: Daniel J. Eck <dje13@illinois.edu>
+Description: Envelope methodology and aster modeling are combined to provide users with precise estimation of expected Darwinian fitness.
+Depends: R (>= 2.10.0), aster
+Encoding: UTF-8
+License: GPL-2
+NeedsCompilation: no
+Packaged: 2016-04-18 10:06:46 UTC; hornik
+Repository: CRAN
+RdMacros: mathjaxr
+Imports: foreach, doSNOW,caTools, MASS, aster2, parallel, mathjaxr
+RoxygenNote: 7.1.2
+
