@@ -90,16 +90,20 @@ get1Dderiv <- function(w,A,B){
 #' The vector returned at a specific iteration is orthogonal to the vectors
 #' returned at previous iterations. When finished, a basis matrix for the envelope space is returned.
 #' @param M A \mjeqn{\sqrt{n}}{ascii} estimate of an estimator's asymptotic covariance matrix.
-#' @param U A \mjeqn{\sqrt{n}}{ascii} estimate of the parameter associated with the space we are enveloping. For our purposes this quantity
-#'is either the outer product of the MLE of the mean-value
-#'submodel parameter vector with itself or the outer product of the
-#'MLE of the canonical submodel parameter vector with itself.
+#' @param U A \mjeqn{\sqrt{n}}{ascii} estimate of the parameter associated with the space we are enveloping. 
+#' For our purposes this quantity is either the outer product of the MLE of the mean-value 
+#' submodel parameter vector with itself or the outer product of the 
+#' MLE of the canonical submodel parameter vector with itself.
 #' @param u The dimension of the envelope space assumed.
 #' @return \item{G}{A \mjeqn{\sqrt{n}}{ascii} estimator of the basis matrix for the
 #' envelope subspace. This matrix has \code{u} columns}
-#' @references Cook, R.D. and Zhang, X. (2014). Foundations for Envelope Models and Methods.\emph{JASA}, In Press.\cr
+#' @references 
+#' 
+#' Cook, R.D. and Zhang, X. (2015 a). Foundations for Envelope Models and Methods. 
+#' \emph{Journal of the American Statistical Association}, \strong{110}, 599-611. \cr
 #' \cr
-#' Cook, R.D. and Zhang, X. (2015). Algorithms for Envelope Estimation.\emph{Journal of Computational and Graphical Statistics}, Published online. \doi{10.1080/10618600.2015.1029577}.
+#' Cook, R.D. and Zhang, X. (2015 b). Algorithms for Envelope Estimation. 
+#' \emph{Journal of Computational and Graphical Statistics}, Published online. \doi{10.1080/10618600.2015.1029577}
 #' @examples \dontrun{library(envlpaster)
 #'  data(simdata30nodes)
 #'  data <- simdata30nodes.asterdata

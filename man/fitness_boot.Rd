@@ -78,8 +78,8 @@ This function implements the first level of the parametric bootstrap procedure g
 }
 \details{
 This function implements the first level of the parametric bootstrap
-procedure given by either Algorithm 1 or Algorithm 2 in Eck (2015) with
-respect to the mean-value parameterization. This is detailed in Steps 1
+procedure given by Algorithm 1 in Eck (2020) with
+respect to either the 1d or eigen approaches. This is detailed in Steps 1
 through 3d in the algorithm below.  This parametric bootstrap  generates
 resamples from the distribution evaluated at an envelope estimator of \mjeqn{\tau}{ascii}
 adjusting for model selection volatility.
@@ -147,7 +147,7 @@ Cook, R.D. and Zhang, X. (2014). Foundations for Envelope Models and Methods. \e
 \cr
 Cook, R.D. and Zhang, X. (2015). Algorithms for Envelope Estimation. \emph{Journal of Computational and Graphical Statistics}, Published online. \doi{10.1080/10618600.2015.1029577}.\cr
 \cr
-Eck, D. J., Geyer, C. J., and Cook, R. D. (2016). Enveloping the aster model. \emph{in prep}. \cr
+Eck, D. J., Geyer, C. J., and Cook, R. D. (2020). Combining envelope methodology and aster models for variance reduction in life history analyses. \emph{Journal of Statistical Planning and Inference}, \strong{205}, 283-292. \cr
 \cr
 Eck, D.~J., Geyer, C.~J., and Cook, R.~D. (2016). Web-based Supplementary Materials for ``Enveloping the aster model.'' \emph{in prep}. \cr
 \cr

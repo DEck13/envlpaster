@@ -1,12 +1,15 @@
 #' fitness_boot
 #' @description
 #' \loadmathjax
-#' This function implements the first level of the parametric bootstrap procedure given by either Algorithm 1 or Algorithm 2 in Eck (2015) with respect to the mean-value parameterization. This is detailed in Steps 1 through 3d in the algorithm below.  This parametric bootstrap  generates resamples from the distribution evaluated at an envelope estimator of \mjeqn{\tau}{ascii} adjusting for model selection volatility.\cr
+#' This function implements the first level of the parametric bootstrap procedure given by Algorithm 1 in Eck et al. (2020) with 
+#' respect to the submodel mean-value parameterization (parameterization closest to that of expected Darwinian fitness). 
+#' This is detailed in Steps 1 through 3d in the algorithm below. This parametric bootstrap generates resamples from the 
+#' distribution evaluated at an envelope estimator of \mjeqn{\tau}{ascii} adjusting for model selection volatility.\cr
 #' @details
-#'   This function implements the first level of the parametric bootstrap
-#' procedure given by either Algorithm 1 or Algorithm 2 in Eck (2015) with
-#' respect to the mean-value parameterization. This is detailed in Steps 1
-#' through 3d in the algorithm below.  This parametric bootstrap  generates
+#' This function implements the first level of the parametric bootstrap procedure given 
+#' by Algorithm 1 in Eck (2020) with respect to either the 1d (1d Algorithm in Cook and Zhang 
+#' (2015 a,b)) or eigen (see Section 4 in Eck et al. (2020)) approaches. 
+#' This is detailed in Steps 1 through 3d in the algorithm below.  This parametric bootstrap generates 
 #' resamples from the distribution evaluated at an envelope estimator of \mjeqn{\tau}{ascii}
 #' adjusting for model selection volatility.
 #' The user specifies a model selection criterion which selects vectors that
@@ -22,7 +25,7 @@
 #' by \code{vectors}. When all of the components of \mjeqn{\tau}{ascii} are components
 #' of interest, then we write \mjeqn{\widehat{\Sigma}_{\upsilon,\upsilon} = \widehat{\Sigma} }{ascii}. When data
 #' is generated via the parametric bootstrap, it is the indices (not the
-#'                                                               original reducing subspaces) that are used to construct envelope estimators
+#' original reducing subspaces) that are used to construct envelope estimators
 #' constructed using the generated data. The algorithm using reducing subspaces
 #' is as follows:
 #'
@@ -58,12 +61,10 @@
 #'       }
 #'   }
 #'
-#'
-#' The parametric bootstrap procedure which uses the 1d algorithm to construct
-#' envelope estimators is analogous to the above algorithm. To use the 1d
-#' algorithm, the user specifies \code{method = "1d"}. A parametric bootstrap
-#' generating resamples from the distribution evaluated at the aster model
-#' MLE is also conducted by this function.
+#'#' For more details, see Eck et al. (2020) and Efron (2014). The parametric bootstrap
+#' procedure which uses the 1d algorithm to construct envelope estimators is
+#' analogous to the above algorithm. To use the 1d algorithm, the user
+#' specifies \code{method = "1d"} instead of \code{method = "eigen"}.
 #' @param model An aster model object.
 #' @param nboot The number of bootstrap iterations desired.
 #' @param index The indices denoting which components of the canonical parameter vector are parameters of interest.
@@ -96,18 +97,24 @@
 #' \item{vectors.list}{A list of indices of eigenvectors used to build the projections in P.list. These indices are selected using the user specified model selection criterion as indicated in Steps 3a-3d in the bootstrap procedure. }
 #' @references
 #'
-#' Cook, R.D. and Zhang, X. (2014). Foundations for Envelope Models and Methods. \emph{JASA}, In Press.\cr
+#' Eck, D. J., Geyer, C. J., and Cook, R. D. (2020). Combining envelope methodology and aster models for variance reduction in life 
+#' history analyses. \emph{Journal of Statistical Planning and Inference}, \strong{205}, 283-292. \cr 
 #' \cr
-#' Cook, R.D. and Zhang, X. (2015). Algorithms for Envelope Estimation. \emph{Journal of Computational and Graphical Statistics}, Published online. \doi{10.1080/10618600.2015.1029577}.\cr
+#' Eck, D.~J., Geyer, C.~J., and Cook, R.~D. (2018). Supporting Data Analysis for 
+#' "Combining Envelope Methodology and Aster Models for Variance Reduction in Life History Analyses." \cr
 #' \cr
-#' Eck, D. J., Geyer, C. J., and Cook, R. D. (2016). Enveloping the aster model. \emph{in prep}. \cr
+#' Cook, R.D. and Zhang, X. (2015 a). Foundations for Envelope Models and Methods. 
+#' \emph{Journal of the American Statistical Association}, \strong{110}, 599-611. \cr
 #' \cr
-#' Eck, D.~J., Geyer, C.~J., and Cook, R.~D. (2016). Web-based Supplementary Materials for ``Enveloping the aster model.'' \emph{in prep}. \cr
+#' Cook, R.D. and Zhang, X. (2015 b). Algorithms for Envelope Estimation. 
+#' \emph{Journal of Computational and Graphical Statistics}, Published online. \doi{10.1080/10618600.2015.1029577}.\cr
 #' \cr
-#' Efron, B. (2014). Estimation and Accuracy After Model Selection. \emph{JASA}, \strong{109:507}, 991-1007.
+#' Efron, B. (2014). Estimation and Accuracy After Model Selection. \emph{Journal of the American Statistical Association}, 
+#' \strong{109:507}, 991-1007.
 #' @noMd
 #' @export
-#' @examples \dontrun{# see Web-based Supplementary Materials for ``Enveloping the aster model.''}
+#' @examples \dontrun{# see Supporting Data Analysis for 
+#' "Combining Envelope Methodology and Aster Models for Variance Reduction in Life History Analyses."}
 #' @import aster
 #' @import doSNOW
 #' @import foreach

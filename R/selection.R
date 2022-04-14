@@ -50,11 +50,13 @@
 #'   \item{alpha}{The desired size of the LRT. }
 #'   \item{type}{The parameterization of the aster model in which envelope methods are being applied. }
 #'   \item{method}{The procedure used to obtain envelope estimators. }
-#' @references Cook, R.D. and Zhang, X. (2014). Foundations for Envelope Models and Methods.\emph{JASA}, In Press.\cr
+#' @references
+#'
+#' Eck, D. J., Geyer, C. J., and Cook, R. D. (2020). Combining envelope methodology and aster models for variance reduction in life 
+#' history analyses. \emph{Journal of Statistical Planning and Inference}, \strong{205}, 283-292. \cr 
 #' \cr
-#' Cook, R.D. and Zhang, X. (2015). Algorithms for Envelope Estimation.\emph{Journal of Computational and Graphical Statistics}, Published online. \doi{10.1080/10618600.2015.1029577}.\cr
-#' \cr
-#' Eck, D. J., Geyer, C. J., and Cook, R. D. (2016). Enveloping the aster model. \emph{in prep}.
+#' Cook, R.D. and Zhang, X. (2015). Algorithms for Envelope Estimation. 
+#' \emph{Journal of Computational and Graphical Statistics}, Published online. \doi{10.1080/10618600.2015.1029577}.\cr
 #' @examples
 #' \dontrun{
 #' set.seed(13)
