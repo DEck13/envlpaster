@@ -1,14 +1,14 @@
 #' secondboot
 #' @description
 #' \loadmathjax
-#' This function implements the second level of the parametric bootstrap procedure given by Algorithm 1 in Eck et al. (2020) with 
-#' respect to the submodel mean-value parameterization (parameterization closest to that of expected Darwinian fitness). 
-#' This is detailed in Steps 1 through 3d in the algorithm below. This parametric bootstrap generates resamples from the 
+#' This function implements the second level of the parametric bootstrap procedure given by Algorithm 1 in Eck et al. (2020) with
+#' respect to the submodel mean-value parameterization (parameterization closest to that of expected Darwinian fitness).
+#' This is detailed in Steps 1 through 3d in the algorithm below. This parametric bootstrap generates resamples from the
 #' distribution evaluated at an envelope estimator of \mjeqn{\tau}{ascii} adjusting for model selection volatility.\cr
 #' @details
-#' This function implements the first level of the parametric bootstrap procedure given 
-#' by Algorithm 1 in Eck (2020) with respect to either the 1d (1d Algorithm in Cook and Zhang 
-#' (2015 a,b)) or eigen (see Section 4 in Eck et al. (2020)) approaches. 
+#' This function implements the first level of the parametric bootstrap procedure given
+#' by Algorithm 1 in Eck (2020) with respect to either the 1d (1d Algorithm in Cook and Zhang
+#' (2015 a,b)) or eigen (see Section 4 in Eck et al. (2020)) approaches.
 #' This is detailed in Steps 4 through 5c in the algorithm below. At iteration \mjeqn{b}{ascii}, this parametric
 #' bootstrap generates resamples from the distribution evaluated at the
 #' envelope estimator (\mjeqn{\hat{\tau}_{env}^{(b)}}{ascii}) of \mjeqn{\tau}{ascii}.
@@ -92,23 +92,23 @@
 #'   \item{est.env.subsample}{A components needed to construct sd.Efron if other numerical methods are desired.}
 #' @references
 #'
-#' Eck, D. J., Geyer, C. J., and Cook, R. D. (2020). Combining envelope methodology and aster models for variance reduction in life 
-#' history analyses. \emph{Journal of Statistical Planning and Inference}, \strong{205}, 283-292. \cr 
+#' Eck, D. J., Geyer, C. J., and Cook, R. D. (2020). Combining envelope methodology and aster models for variance reduction in life
+#' history analyses. \emph{Journal of Statistical Planning and Inference}, \strong{205}, 283-292. \cr
 #' \cr
-#' Eck, D.~J., Geyer, C.~J., and Cook, R.~D. (2018). Supporting Data Analysis for 
+#' Eck, D.~J., Geyer, C.~J., and Cook, R.~D. (2018). Supporting Data Analysis for
 #' "Combining Envelope Methodology and Aster Models for Variance Reduction in Life History Analyses." \cr
 #' \cr
-#' Cook, R.D. and Zhang, X. (2015 a). Foundations for Envelope Models and Methods. 
+#' Cook, R.D. and Zhang, X. (2015 a). Foundations for Envelope Models and Methods.
 #' \emph{Journal of the American Statistical Association}, \strong{110}, 599-611. \cr
 #' \cr
-#' Cook, R.D. and Zhang, X. (2015 b). Algorithms for Envelope Estimation. 
+#' Cook, R.D. and Zhang, X. (2015 b). Algorithms for Envelope Estimation.
 #' \emph{Journal of Computational and Graphical Statistics}, Published online. \doi{10.1080/10618600.2015.1029577}.\cr
 #' \cr
-#' Efron, B. (2014). Estimation and Accuracy After Model Selection. \emph{Journal of the American Statistical Association}, 
+#' Efron, B. (2014). Estimation and Accuracy After Model Selection. \emph{Journal of the American Statistical Association},
 #' \strong{109:507}, 991-1007.
 #' @noMd
 #' @export
-#' @examples \dontrun{# see Supporting Data Analysis for 
+#' @examples \dontrun{# see Supporting Data Analysis for
 #' "Combining Envelope Methodology and Aster Models for Variance Reduction in Life History Analyses."}
 #'
 
@@ -161,11 +161,11 @@ secondboot <- function(k, nboot2, out, model, index, data, amat,
 
   # the array (matrix) that specifies Darwinian fitness
   amat.mat <- NULL
-  if(class(amat) == "array"){
+  if(is.matrix(amat)==FALSE){
     amat.mat <- matrix(amat, nrow = npop,
                        byrow = TRUE)
   }
-  if(class(amat) == "matrix"){
+  if(is.matrix(amat)==TRUE){
     amat.mat <- amat
     amat <- array(amat.mat, dim = c(npop, nnode, p))
   }
