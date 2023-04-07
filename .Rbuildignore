@@ -1,2 +1,6 @@
+<<<<<<< Updated upstream
 ^envlpaster\.Rproj$
+=======
+^.*\.Rproj$
+>>>>>>> Stashed changes
 ^\.Rproj\.user$

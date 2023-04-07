@@ -1,7 +1,12 @@
 Version: 1.0
 
+<<<<<<< Updated upstream
 RestoreWorkspace: No
 SaveWorkspace: No
+=======
+RestoreWorkspace: Default
+SaveWorkspace: Default
+>>>>>>> Stashed changes
 AlwaysSaveHistory: Default
 
 EnableCodeIndexing: Yes
@@ -14,9 +19,15 @@ LaTeX: pdfLaTeX
 
 AutoAppendNewline: Yes
 StripTrailingWhitespace: Yes
+<<<<<<< Updated upstream
 LineEndingConversion: Posix
+=======
+>>>>>>> Stashed changes
 
 BuildType: Package
 PackageUseDevtools: Yes
 PackageInstallArgs: --no-multiarch --with-keep.source
+<<<<<<< Updated upstream
 PackageRoxygenize: rd,collate,namespace
+=======
+>>>>>>> Stashed changes
