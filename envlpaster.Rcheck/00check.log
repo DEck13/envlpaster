@@ -1,0 +1,15 @@
+* using log directory ‘/Users/danieleck/research/envlpaster/envlpaster.Rcheck’
+* using R version 4.2.2 (2022-10-31)
+* using platform: aarch64-apple-darwin20 (64-bit)
+* using session charset: UTF-8
+* checking for file ‘envlpaster/DESCRIPTION’ ... OK
+* this is package ‘envlpaster’ version ‘1.1’
+* package encoding: UTF-8
+* checking package namespace information ... OK
+* checking package dependencies ... ERROR
+Packages required but not available: 'caTools', 'doSNOW', 'mathjaxr'
+
+See section ‘The DESCRIPTION file’ in the ‘Writing R Extensions’
+manual.
+* DONE
+Status: 1 ERROR
