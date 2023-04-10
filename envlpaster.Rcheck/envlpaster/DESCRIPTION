@@ -13,4 +13,4 @@ Repository: CRAN
 RdMacros: mathjaxr
 Imports: foreach, MASS, aster2, parallel, caTools, doSNOW, mathjaxr
 RoxygenNote: 7.1.2
-
+Built: R 4.2.2; ; 2023-04-10 20:15:51 UTC; unix
