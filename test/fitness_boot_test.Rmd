@@ -1,7 +1,7 @@
 ---
-title: "envlaster parellelization summary doc"
+title: "envlpaster parellelization summary doc"
 author: "Sicong He"
-date: "10/20/2021"
+date: ""
 output: html_document
 ---
 
@@ -1116,7 +1116,7 @@ for(j in 1:npop){
 ```
 
 
-Fitting the model, change`fitness_boot` to `fitness_boot2` would change calculation to two-layer parelled bootstap.
+Fitting the model, change `fitness_boot` to `fitness_boot2` would change calculation to two-layer parelled bootstap.
 ```{r test out,warning=FALSE}
 m3 <- fitness_boot(model = m.main, nboot = c(100,10), index = target,
                      vectors = foo$bic, data = data, amat = amat, newdata = fred,
@@ -1124,40 +1124,42 @@ m3 <- fitness_boot(model = m.main, nboot = c(100,10), index = target,
                      criterion = "BIC", method = "eigen", quiet = FALSE,corenum =4)
 ```
 
-Attempt to take out the result from 1st bootstrap(result from `fitness_bot`) and manually tried second bootstrap for output
-```{r, eval=FALSE}
-   env.sum<- matrix(0,npop, nboot[2])
-  sd.Efron.mean <- rep(0, npop)
 
-  for (i in 1:nboot[1]){
-    resultlist2[[i]][[1]]=matrix(resultlist2[[i]][[1]], ncol = nboot[2])
-    resultlist2[[i]][[1]] =amat.mat%*%resultlist2[[i]][[1]] 
-    env.sum = env.sum+resultlist2[[i]][[1]]
-    
-    B <- t(resultlist2[[i]][[2]] - rowSums(resultlist2[[i]][[2]])/nboot[2])
-    V <- (t(B) %*% B) / nboot[2];  eig.V <- eigen(V)
-    env.centered <- t(resultlist2[[i]][[1]] - resultlist2[[i]][[3]])
-    cov <- t(B) %*% env.centered / nboot[2]
-    var.Efron <- t(cov) %*% eig.V$vec %*% diag(1/eig.V$val) %*%
-      t(eig.V$vec) %*% cov
-    sd.Efron <- sqrt(diag(var.Efron))
-    
-    sd.Efron.mean = sd.Efron.mean + sd.Efron/nboot[1]
-  }
-  mu.renew <- transformUnconditional(beta, data.renew,
-                                     modmat = modmat.renew, from = "beta", to = "mu",
-                                     offset = offset.renew) #from the second bootstrap, using npop2
-  fit <- amat%*% mu.renew
-  dev<-MLE.boot.out-as.vector(fit)
-  mle.sum = (dev[, i] %*% t(dev[, i]))
-  for (i in 2:nboot[1]){
-    mle.sum <- mle.sum + (dev[, i] %*% t(dev[, i]))
-  }
-  sd.MLE <- sqrt(diag(mle.sum) / (nboot[1] - 1))
-  env.sum = env.sum/nboot[1]
-  ratio <- sd.MLE / sd.Efron.mean
-  final_list = list(env.sum,sd.Efron.mean,fit,mle.sum,ratio, resultlist2,env.boot.out)
-```
+
+<!-- Attempt to take out the result from 1st bootstrap(result from `fitness_bot`) and manually tried second bootstrap for output -->
+<!-- ```{r, eval=FALSE, echo=FALSE} -->
+<!--    env.sum<- matrix(0,npop, nboot[2]) -->
+<!--   sd.Efron.mean <- rep(0, npop) -->
+
+<!--   for (i in 1:nboot[1]){ -->
+<!--     resultlist2[[i]][[1]]=matrix(resultlist2[[i]][[1]], ncol = nboot[2]) -->
+<!--     resultlist2[[i]][[1]] =amat.mat%*%resultlist2[[i]][[1]]  -->
+<!--     env.sum = env.sum+resultlist2[[i]][[1]] -->
+
+<!--     B <- t(resultlist2[[i]][[2]] - rowSums(resultlist2[[i]][[2]])/nboot[2]) -->
+<!--     V <- (t(B) %*% B) / nboot[2];  eig.V <- eigen(V) -->
+<!--     env.centered <- t(resultlist2[[i]][[1]] - resultlist2[[i]][[3]]) -->
+<!--     cov <- t(B) %*% env.centered / nboot[2] -->
+<!--     var.Efron <- t(cov) %*% eig.V$vec %*% diag(1/eig.V$val) %*% -->
+<!--       t(eig.V$vec) %*% cov -->
+<!--     sd.Efron <- sqrt(diag(var.Efron)) -->
+
+<!--     sd.Efron.mean = sd.Efron.mean + sd.Efron/nboot[1] -->
+<!--   } -->
+<!--   mu.renew <- transformUnconditional(beta, data.renew, -->
+<!--                                      modmat = modmat.renew, from = "beta", to = "mu", -->
+<!--                                      offset = offset.renew) #from the second bootstrap, using npop2 -->
+<!--   fit <- amat%*% mu.renew -->
+<!--   dev<-MLE.boot.out-as.vector(fit) -->
+<!--   mle.sum = (dev[, i] %*% t(dev[, i])) -->
+<!--   for (i in 2:nboot[1]){ -->
+<!--     mle.sum <- mle.sum + (dev[, i] %*% t(dev[, i])) -->
+<!--   } -->
+<!--   sd.MLE <- sqrt(diag(mle.sum) / (nboot[1] - 1)) -->
+<!--   env.sum = env.sum/nboot[1] -->
+<!--   ratio <- sd.MLE / sd.Efron.mean -->
+<!--   final_list = list(env.sum,sd.Efron.mean,fit,mle.sum,ratio, resultlist2,env.boot.out) -->
+<!-- ``` -->
 
 
 

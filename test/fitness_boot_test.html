@@ -11,9 +11,8 @@
 
 <meta name="author" content="Sicong He" />
 
-<meta name="date" content="2021-10-20" />
 
-<title>envlaster parellelization summary doc</title>
+<title>envlpaster parellelization summary doc</title>
 
 <script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
 // be compatible with the behavior of Pandoc < 2.8).
@@ -350,9 +349,8 @@ display: none;
 
 
 
-<h1 class="title toc-ignore">envlaster parellelization summary doc</h1>
+<h1 class="title toc-ignore">envlpaster parellelization summary doc</h1>
 <h4 class="author">Sicong He</h4>
-<h4 class="date">10/20/2021</h4>
 
 </div>
 
@@ -409,7 +407,7 @@ root &lt;- redata$root
 fit &lt;- redata$fit
 varvar &lt;- quantities$varvar
 idvar &lt;- quantities$idvar</code></pre>
-<pre class="r"><code>load(&quot;main-all-terms-DavidLowrydata.RData&quot;)</code></pre>
+<pre class="r"><code>load(&quot;../data/main-all-terms-DavidLowrydata.RData&quot;)</code></pre>
 <pre class="r"><code>m.main &lt;- aster(resp ~ varb + fit:(gen_bac + site +
 inversion + type), pred, fam, varvar = varvar,
 idvar = idvar, data = redata, root = root)</code></pre>
@@ -444,47 +442,44 @@ amat &lt;- matrix(0, nrow = npop, ncol = nnode * npop)</code></pre>
 <pre class="r"><code>for(j in 1:npop){ 
   amat[j, npop + j] =amat[j, npop + j]
 }</code></pre>
-<p>Fitting the model, change<code>fitness_boot</code> to
+<p>Fitting the model, change <code>fitness_boot</code> to
 <code>fitness_boot2</code> would change calculation to two-layer
 parelled bootstap.</p>
 <pre class="r"><code>m3 &lt;- fitness_boot(model = m.main, nboot = c(100,10), index = target,
                      vectors = foo$bic, data = data, amat = amat, newdata = fred,
                      modmat.new = modmat.renew, renewdata = renewdata,
                      criterion = &quot;BIC&quot;, method = &quot;eigen&quot;, quiet = FALSE,corenum =4)</code></pre>
-<p>Attempt to take out the result from 1st bootstrap(result from
-<code>fitness_bot</code>) and manually tried second bootstrap for
-output</p>
-<pre class="r"><code>   env.sum&lt;- matrix(0,npop, nboot[2])
-  sd.Efron.mean &lt;- rep(0, npop)
-
-  for (i in 1:nboot[1]){
-    resultlist2[[i]][[1]]=matrix(resultlist2[[i]][[1]], ncol = nboot[2])
-    resultlist2[[i]][[1]] =amat.mat%*%resultlist2[[i]][[1]] 
-    env.sum = env.sum+resultlist2[[i]][[1]]
-    
-    B &lt;- t(resultlist2[[i]][[2]] - rowSums(resultlist2[[i]][[2]])/nboot[2])
-    V &lt;- (t(B) %*% B) / nboot[2];  eig.V &lt;- eigen(V)
-    env.centered &lt;- t(resultlist2[[i]][[1]] - resultlist2[[i]][[3]])
-    cov &lt;- t(B) %*% env.centered / nboot[2]
-    var.Efron &lt;- t(cov) %*% eig.V$vec %*% diag(1/eig.V$val) %*%
-      t(eig.V$vec) %*% cov
-    sd.Efron &lt;- sqrt(diag(var.Efron))
-    
-    sd.Efron.mean = sd.Efron.mean + sd.Efron/nboot[1]
-  }
-  mu.renew &lt;- transformUnconditional(beta, data.renew,
-                                     modmat = modmat.renew, from = &quot;beta&quot;, to = &quot;mu&quot;,
-                                     offset = offset.renew) #from the second bootstrap, using npop2
-  fit &lt;- amat%*% mu.renew
-  dev&lt;-MLE.boot.out-as.vector(fit)
-  mle.sum = (dev[, i] %*% t(dev[, i]))
-  for (i in 2:nboot[1]){
-    mle.sum &lt;- mle.sum + (dev[, i] %*% t(dev[, i]))
-  }
-  sd.MLE &lt;- sqrt(diag(mle.sum) / (nboot[1] - 1))
-  env.sum = env.sum/nboot[1]
-  ratio &lt;- sd.MLE / sd.Efron.mean
-  final_list = list(env.sum,sd.Efron.mean,fit,mle.sum,ratio, resultlist2,env.boot.out)</code></pre>
+<!-- Attempt to take out the result from 1st bootstrap(result from `fitness_bot`) and manually tried second bootstrap for output -->
+<!-- ```{r, eval=FALSE, echo=FALSE} -->
+<!--    env.sum<- matrix(0,npop, nboot[2]) -->
+<!--   sd.Efron.mean <- rep(0, npop) -->
+<!--   for (i in 1:nboot[1]){ -->
+<!--     resultlist2[[i]][[1]]=matrix(resultlist2[[i]][[1]], ncol = nboot[2]) -->
+<!--     resultlist2[[i]][[1]] =amat.mat%*%resultlist2[[i]][[1]]  -->
+<!--     env.sum = env.sum+resultlist2[[i]][[1]] -->
+<!--     B <- t(resultlist2[[i]][[2]] - rowSums(resultlist2[[i]][[2]])/nboot[2]) -->
+<!--     V <- (t(B) %*% B) / nboot[2];  eig.V <- eigen(V) -->
+<!--     env.centered <- t(resultlist2[[i]][[1]] - resultlist2[[i]][[3]]) -->
+<!--     cov <- t(B) %*% env.centered / nboot[2] -->
+<!--     var.Efron <- t(cov) %*% eig.V$vec %*% diag(1/eig.V$val) %*% -->
+<!--       t(eig.V$vec) %*% cov -->
+<!--     sd.Efron <- sqrt(diag(var.Efron)) -->
+<!--     sd.Efron.mean = sd.Efron.mean + sd.Efron/nboot[1] -->
+<!--   } -->
+<!--   mu.renew <- transformUnconditional(beta, data.renew, -->
+<!--                                      modmat = modmat.renew, from = "beta", to = "mu", -->
+<!--                                      offset = offset.renew) #from the second bootstrap, using npop2 -->
+<!--   fit <- amat%*% mu.renew -->
+<!--   dev<-MLE.boot.out-as.vector(fit) -->
+<!--   mle.sum = (dev[, i] %*% t(dev[, i])) -->
+<!--   for (i in 2:nboot[1]){ -->
+<!--     mle.sum <- mle.sum + (dev[, i] %*% t(dev[, i])) -->
+<!--   } -->
+<!--   sd.MLE <- sqrt(diag(mle.sum) / (nboot[1] - 1)) -->
+<!--   env.sum = env.sum/nboot[1] -->
+<!--   ratio <- sd.MLE / sd.Efron.mean -->
+<!--   final_list = list(env.sum,sd.Efron.mean,fit,mle.sum,ratio, resultlist2,env.boot.out) -->
+<!-- ``` -->
 
 
 
