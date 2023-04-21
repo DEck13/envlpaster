@@ -1,0 +1,1169 @@
+---
+title: "envlpaster parellelization summary doc"
+author: "Sicong He"
+date: ""
+output: html_document
+---
+
+```{r setup}
+knitr::opts_chunk$set(eval = FALSE, echo = TRUE)
+```
+import libraries:
+```{r,message=FALSE,warning=FALSE}
+library("devtools")
+library("roxygen2")
+library("testthat")
+library("knitr")
+library(foreach)
+library(doParallel)
+library(aster2)
+library(envlpaster)
+library(doSNOW)
+library(aster)
+```
+
+
+`fitness_boot`, `secondboot` in the below section are updated version of the functions based on the 4.2.1 version of R matrix array datatype and could have potential error in the future. Function `fitness_boot` is modified in line 112 compared to the current parallel version. noted that is.matrix() is used in place of class(amat)=="matrix"/"array", similar in line 336 in `secondboot`. Also verify if this change is made in all other version of the function before running the code or it could cause error.
+
+Combined version of paralleled bootstrap function using lapply and foreach in `fit_boot_Efron-combined.R`, does not work as expected
+
+```{r fitboot par function, echo=FALSE}
+fitness_boot <- function(model, nboot, index, vectors = NULL, dim = NULL,
+    data, amat, newdata, modmat.new = NULL, renewdata = NULL,
+    criterion = c("AIC","BIC","LRT"), alpha = 0.05, fit.name = NULL,
+    method = c("eigen","1d"), quiet = FALSE,corenum=NULL)
+{
+
+
+  # extract important envelope initial quantities
+  # obtain the target and nuisance parameters
+  # build U w.r.t. the target parameters
+  beta <- model$coef
+  x <- model$x
+  vars <- colnames(x)
+  code <- data$code
+  families <- data$families
+  fam <- model$fam
+  pred <- model$pred
+  root <- model$root
+  n <- nrow(x)
+  nnode <- ncol(x)
+  npop <- nrow(newdata) 
+  p <- length(beta)
+  formula <- model$formula
+  modmat.model <- model$modmat
+  modmat.mat <- matrix(modmat.model, nrow = n * nnode)
+  dimensions <- dim(modmat.model)
+  offset <- as.vector(model$origin)
+
+  # obtain tau
+  mu <- predict(model, parm.type = "mean.value",
+    model.type = "unconditional")
+  tau <- crossprod(modmat.mat, mu)
+  nuis.ind <- c(1:p)[!index]
+  k <- length(index)
+  target <- tau[index]
+
+  # obtain the projection used to construct the envelope
+  # estimator
+  avar <- (model$fisher)[index,index]
+  U <- P <- NULL; u <- length(index)
+  if(method == "eigen"){
+    u <- length(vectors)
+    eig <- eigen(avar, symmetric = TRUE)
+    G <- eig$vec[,c(vectors)]
+    P <- tcrossprod(G)
+  }
+  if(method == "1d"){
+    u <- dim
+    U <- target %o% target
+    G <- manifold1Dplus(M = avar, U = U, u = u)
+    P <- tcrossprod(G)
+  }
+
+  tau.env <- crossprod(P,target)
+  fulltau <- tau
+  fulltau[index] <- tau.env
+
+  # change the model matrix for the envelope estimator
+  modelmatrix.int <- modmat.mat
+  modelmatrix.int[, index] <- modelmatrix.int[, index] %*% P
+  modmat.model.int <- array(modmat.mat, dimensions)
+
+  # convert from tau to beta changed from fulltau to tau
+  beta.foo <- transformUnconditional(parm = fulltau,
+    modelmatrix.int, data, from = "tau", to = "beta",
+    offset = offset)
+
+  # set up for the bootstrap for the MLE
+  theta.hat2 <- predict(model, model.type = "cond",
+    parm.type = "canon")
+  theta.hat2 <- matrix(theta.hat2, nrow = n, ncol = nnode)
+  MLE.tau.boot <- matrix(nrow = npop, ncol = nboot[1]) # changed from nrow = p
+  b2 <- "try-error"; class(b2) <- "try-error"
+
+  # set up for the bootstrap for the envelope estimator
+  # (this envelope estimator corresponds to the selected method)
+  theta.hat <- transformUnconditional(parm = fulltau,
+    modelmatrix.int, data, from = "tau", to = "theta",
+    offset = offset)
+  theta.hat <- matrix(theta.hat, nrow = n, ncol = nnode)
+  #theta.hat <- theta.hat2
+  b <- "try-error"; class(b) <- "try-error"
+
+
+  # the array (matrix) that specifies Darwinian fitness, noted that is.matrix() is used in place of class(amat)=="matrix"/"array"
+  amat.mat <- NULL
+  if(is.matrix(amat)==FALSE){
+    amat.mat <- matrix(amat, nrow = npop,
+    byrow = TRUE)
+  }
+  if(is.matrix(amat) ==TRUE){
+    amat.mat <- amat
+  }
+
+  # initial quantities
+  est <- est2 <- matrix(0, ncol = npop)
+  env.tau.boot <- matrix(0, ncol = p)
+  P.list <-  NULL
+  class(P.list) <- class(P.list) <- "list"
+  vectors.list  <- NULL
+  class(vectors.list)  <- "list"
+  out <- NULL
+  table <- NULL
+
+
+  #modmat.renew <- model.matrix(m1$formula, data = renewdata)
+  cond <- !(colnames(modmat.new) %in% model$dropped)
+  modmat.new <- modmat.new[, cond]
+  M1.renew <- t(modmat.new[,-index])
+  M2.renew <- P %*% t(modmat.new[,index])
+  modmat.env.renew <- t(rbind(M1.renew,M2.renew))
+  data.renew <- asterdata(newdata, vars = vars, pred = pred,
+    group = rep(0, length(vars)), code = code,
+    families = families)
+  origin.renew <- model$origin[1:npop,]
+  offset.renew <- as.vector(origin.renew)
+
+  # fit the aster model using different methods
+
+  check_error = function(class, modmat_status=modmat.model) {
+    if(class == "try-error"){
+      class <- class(try(aout4star2 <- aster(xstar2, root, pred,
+        fam, modmat_status, parm = beta,
+        method = "nlm"), silent = TRUE))[1]
+    }
+
+    if(class == "try-error"){
+      class <- class(try( aout4star2 <- aster(xstar2, root,
+        pred, fam, modmat_status), silent = TRUE))[1]
+    }
+
+    if(class == "try-error"){
+      class<- class(try(aout4star2 <- aster(xstar2, root, pred,
+        fam, modmat_status, method = "nlm"), silent = TRUE))[1]
+    }
+    return(class)
+  }
+  method_check = function(method, tau, index, model, data, alpha) {
+    result = 0
+    if (method == "1d") {
+      barbaz <- envlpaster::selection(tau, index, model, data,
+        alpha = alpha, type = "mean-value", method = "1d")
+      if(criterion == "AIC") result <- barbaz$aic
+      if(criterion == "BIC") result <- barbaz$bic
+      if(criterion == "LRT") result <- barbaz$LRT
+    }
+    if(method == "eigen"){
+      fubar <- envlpaster::selection(tau, index, model, data,
+        alpha = alpha, type = "mean-value", method = "eigen")
+      if(criterion == "AIC") result <- fubar$aic
+      if(criterion == "BIC") result <- fubar$bic
+      if(criterion == "LRT") result <- fubar$LRT
+    }
+    return(result)
+  }
+
+
+  #list of vars and functs that need to be move into the parallel from global
+  cl <- makeCluster(corenum*2,type="SOCK")
+  registerDoSNOW(cl)
+  clusterExport(cl, c('check_error','method_check','theta.hat2',
+    'pred', 'fam', 'root','modmat.model','beta',
+    'modmat.mat','offset','amat.mat','vectors.list',
+    'MLE.tau.boot','est2','b2', 'offset.renew','index','method','data','data.renew','alpha',
+    'modmat.new','modmat.model.int','n','nnode','vectors'),
+    envir=environment())
+  clusterEvalQ(cl,library("aster2","envlpaster","aster"))
+  resultlist<-foreach(k=1:nboot[1]) %dopar%{
+
+    # fit the aster model to the resampled data obtained from
+    # the MLE of theta
+    xstar2 <-aster::raster(theta.hat2, pred, fam, root)
+  # fit the aster model to the resampled data obtained from
+    # the MLE of theta
+    class(b2) <- class(try(aout4star2 <-aster::aster(xstar2, root, pred,
+      fam, modmat.model, parm = beta), silent = TRUE))[1]
+    class(b2) <- check_error(class(b2))
+    # MLE of expected Darwinian fitness
+    tau.renew <- transformUnconditional(aout4star2$coef, data,
+      modmat = modmat.mat, from = "beta", to = "tau",
+      offset = offset)
+    phi.MLE.renew <- offset.renew + modmat.new %*% aout4star2$coef
+    mu.MLE.renew <- transformSaturated(parm = phi.MLE.renew,
+      data.renew, from = "phi", to = "mu")
+    MLE.tau.boot <- tau.renew
+    est2 <- amat.mat %*% mu.MLE.renew #Dar.fit.MLE
+    # selection of the envelope eigenstructure
+    vectors.list = method_check(method, tau = tau.renew, index=index, model=aout4star2, data=data, alpha=alpha)
+    dim.1d=0
+    if (method=="1d") {
+      dim.1d=vectors.list
+    }
+
+    # get the bootstrapped envelope estimators
+    M <- matrix(modmat.model.int, nrow = n * nnode)
+    avar.star <- (aout4star2$fisher)[index,index]
+    beta.env.star <- aout4star2$coef
+    mu.star <- predict(aout4star2, parm.type = "mean.value",
+      model.type = "unconditional")
+    modelmatrix.star <- M
+
+    tau.env.star <- crossprod(modelmatrix.star, mu.star)
+    env.tau.boot <- tau.env.star
+
+    # envelope estimator of expected Darwinian fitness using
+    # eigenstructures
+    if(method == "eigen"){
+      G.star <- eigen(avar.star, symmetric = TRUE)$vec[,c(vectors)]
+      P.star <- tcrossprod(G.star)
+      P.list <- P.star
+      modelmatrix.star[, index] <- modelmatrix.star[, index] %*% P.star
+      M1.renew <- t(modmat.new[,-index])
+      M2.renew <- P.star %*% t(modmat.new[,index])
+      modmat.env.renew <- t(rbind(M1.renew,M2.renew))
+    }
+
+    # envelope estimator of expected Darwinian fitness using the
+    # 1d algorithm
+    if(method == "1d"){
+      if(vectors.list < length(index)){
+        up.env.star <- crossprod(M, mu.star)[index]
+        U.star <- up.env.star %o% up.env.star
+        G.star <- manifold1Dplus(avar.star, U = U.star, u = dim.1d)
+        P.star <- tcrossprod(G.star)
+        P.list[k] <- P.star
+
+        modelmatrix.star[, index] <- modelmatrix.star[, index] %*% P.star
+        beta.env.star <- transformUnconditional(parm = tau.env.star,
+          modelmatrix.star, data, from = "tau", to = "beta",
+          offset = offset)
+        modmat.env.renew <- modmat.new
+
+      }
+      if(dim.1d == length(index)){
+        P.list <- diag(length(index))
+        env.tau.boot<- tau.renew
+      }
+      if(dim.1d == length(index)){
+        env.tau.boot<- tau.renew
+      }
+    }
+    # P.list
+    # env.tau.boot
+    beta.env.star <- transformUnconditional(parm = tau.env.star,
+        modelmatrix.star, data, from = "tau", to = "beta",
+        offset = offset)
+    modmat.env.renew[, index] <- modmat.env.renew[, index] %*% P.star
+        mu.env.renew <- transformUnconditional(parm = beta.env.star,
+    modmat.env.renew, data.renew, from = "beta", to = "mu",
+          offset = offset.renew)
+
+    # the stored expected Darwinian fitness estimates
+    est<- amat.mat %*% mu.env.renew
+    list(est,
+         est2,
+         MLE.tau.boot,
+        env.tau.boot,
+        P.list,
+        vectors.list)
+  }
+  stopImplicitCluster()
+  stopCluster(cl)
+  env.boot.out=do.call(cbind, lapply(1:nboot[1], function(j){
+    unlist(resultlist[[j]][1])
+  }))
+   MLE.boot.out=do.call(cbind, lapply(1:nboot[1], function(j){
+    unlist(resultlist[[j]][2])
+  }))
+  MLE.tau.boot=do.call(cbind, lapply(1:nboot[1], function(j){
+    unlist(resultlist[[j]][3])
+  }))
+  env.tau.boot=do.call(cbind, lapply(1:nboot[1], function(j){
+    unlist(resultlist[[j]][4])
+  }))
+   P.list=do.call('c', lapply(1:nboot[1], function(j){
+    resultlist[[j]][5]
+  }))
+  vectors.list=do.call('c', lapply(1:nboot[1], function(j){
+    resultlist[[j]][6]
+  }))
+  out<-list( env.boot.out = env.boot.out, MLE.boot.out = MLE.boot.out, MLE.tau.boot = MLE.tau.boot,
+         env.tau.boot = env.tau.boot,
+         P.list = P.list,
+         vectors.list = vectors.list)
+  return(out)
+
+}
+```
+
+```{r secondboot, echo=FALSE}
+secondboot <- function(k, nboot2, out, model, index, data, amat, 
+    newdata, method = c("eigen","1d"))
+{
+
+  # extract necessary components from the top-level of
+  # bootstrapping 
+  env.boot.out <- out$env.boot.out
+  env.1d.boot.out <- out$env.1d.boot.out
+  MLE.boot.out <- out$MLE.boot.out
+  MLE.tau.boot <- out$MLE.tau.boot
+  env.tau.boot <- out$env.tau.boot
+  env.1d.tau.boot <- out$env.1d.tau.boot
+  P.list <- out$P.list
+  P.1d.list <- out$P.1d.list
+  vectors.list <- out$vectors.list
+  u.1d.list <- out$u.1d.list
+  nboot <- ncol(env.boot.out)
+  npop <- nrow(env.boot.out)
+
+
+  # specify necessary quantities for secondboot function
+  # not extracted in the above
+  aout4star2 <- b2 <- model
+  beta <- model$coef
+  p <- length(beta)
+  n <- nrow(model$x)
+  nnode <- ncol(model$x)
+  modmat.mat <- matrix(model$modmat, nrow = n * nnode)
+  mu <- predict(model, parm.type = "mean.value", 
+    model.type = "unconditional")
+  #tau <- crossprod(modmat.mat, mu)
+  tau <- MLE.tau.boot[, k]
+  offset <- as.vector(model$origin)
+  code <- data$code
+  families <- data$families
+  vars <- colnames(model$x)
+  fam <- model$fam
+  pred <- model$pred
+  root <- model$root  
+
+
+  # necessary for trial run
+  cov <- V <- var.Efron <- NULL
+  MLE.tau.boot.subsample <- NULL
+  est.env.subsample <- NULL
+
+
+  # the array (matrix) that specifies Darwinian fitness
+  amat.mat <- NULL
+  if(is.matrix(amat)==FALSE){
+    amat.mat <- matrix(amat, nrow = npop, 
+    byrow = TRUE)
+  }
+  if(is.matrix(amat) ==TRUE){
+    amat.mat <- amat
+    amat <- array(amat.mat, dim = c(npop, nnode, p))
+  }
+
+  # initialize important quantities
+  P.foo <- M.foo <- fit.foo <- foo <- NULL
+  vectors.foo <- u <- NULL
+
+  if(method == "eigen"){
+    foo <- env.tau.boot[, k] 
+    vectors.foo <- vectors.list[[k]]
+    u <- length(vectors.foo)
+    P.foo <- P.list[[k]] 
+    M.foo <- modmat.mat; M.foo[, index] <- M.foo[, index] %*% P.foo
+    fit.foo <- rowSums(out$env.boot.out) / nboot
+  }
+
+  if(method == "1d"){
+    u <- u.1d.list[[k]]
+    fit.foo <- rowSums(out$env.1d.boot.out) / nboot
+    if(u == length(index)){
+      foo <- MLE.tau.boot[, k]
+      P.foo <- P.1d.list[[k]] 
+      M.foo <- modmat.mat
+    }
+    if(u < length(index)){
+      foo <- env.1d.tau.boot[, k] 
+      P.foo <- P.1d.list[[k]] 
+      M.foo <- modmat.mat; M.foo[, index] <- M.foo[, index] %*% P.foo
+    }
+  }
+
+  # theta values
+  theta.samp <- transformUnconditional(foo, M.foo, data, 
+    from = "tau", to = "theta", offset = offset)
+  theta.samp <- matrix(theta.samp, nrow = n, ncol = nnode)
+  
+  # setup of model matrices and asterdata object 
+  # obtained from top level of bootstrapping
+  cond <- !(colnames(modmat.renew) %in% model$dropped)
+  modmat.renew <- modmat.env.renew <- modmat.renew[, cond]
+  modmat.env.renew[, index] <- 
+    modmat.env.renew[, index] %*% P.foo
+  data.renew <- asterdata(newdata, vars = vars, pred = pred,
+    group = rep(0, length(vars)), code = code, 
+    families = families)
+  origin.renew <- model$origin[1:npop,]
+  offset.renew <- as.vector(origin.renew)    
+
+  # initial quantities
+  #M.foo.array <- array(M.foo, dim = dim(model$modmat))
+  #print(dim(M.foo.array))
+  #print(dim(model$modmat))
+  r <- length(index)
+  U.2nd <- P.2nd <- Sigma.uu <- matrix(0, r, r)
+  Gamma.2nd <- matrix(0, nrow = r, ncol = u)
+  M.2nd <- M.foo
+  est.env.subsample <- matrix(0, nrow = npop, ncol = nboot2)
+  MLE.tau.boot.subsample <- matrix(0, nrow = p, ncol = nboot2)
+  sd.Efron <- 0
+
+  # generate many new resamples    
+  for(j in 1:nboot2){
+
+    xstar.samp <- raster(theta.samp, pred, fam, root)
+    
+    # fit the aster model using the secondary generated data
+    class(b2) <- class(try(aout4star2 <- aster(xstar.samp, root, 
+      pred, fam, model$modmat, parm = beta), silent = TRUE))[1]
+
+    if(class(b2) == "try-error"){
+      class(b2) <- class(try(aout4star2 <- aster(xstar.samp, root, pred,
+        fam, model$modmat, parm = beta, 
+        method = "nlm"), silent = TRUE))[1] 
+    }
+
+    if(class(b2) == "try-error"){
+      class(b2) <- class(try( aout4star2 <- aster(xstar.samp, root, 
+        pred, fam, model$modmat), silent = TRUE))[1]
+    }
+
+    if(class(b2) == "try-error"){
+      class(b2) <- class(try(aout4star2 <- aster(xstar.samp, root, pred,
+        fam, model$modmat, method = "nlm"), silent = TRUE))[1] 
+    }
+
+
+    # get tau and mu from this fit
+    mu.star <- predict(aout4star2, parm.type = "mean.value", 
+      model.type = "unconditional")
+
+    #tau.renew <- transformUnconditional(aout4star2$coef, data,
+    #  modmat = modmat.mat, from = "beta", to = "tau",
+    #  offset = offset)      
+
+    # get beta and tau using the model matrix containing
+    # the projection into the envelope
+    Sigma.uu <- aout4star2$fisher[index, index]
+    if(method == "eigen"){
+      if(length(vectors.foo) < length(index)){
+        Gamma.2nd <- eigen(Sigma.uu, symmetric = TRUE)$vec[, vectors.foo]
+        P.2nd <- projection(Gamma.2nd)
+        M.2nd[, index] <- M.2nd[, index] %*% P.2nd
+      }
+      if(length(vectors.foo) == length(index)){
+        M.2nd <- M.foo
+      }
+    }
+    if(method == "1d"){
+      if(u < length(index)){
+        tau.star <- crossprod(M.foo, mu.star)
+        U.2nd <- tau.star[index] %*% t(tau.star[index]) 
+        Gamma.2nd <- manifold1Dplus(Sigma.uu, U = U.2nd, u = u)
+        P.2nd <- tcrossprod(Gamma.2nd)
+      }
+      if(u == length(index)){ 
+        P.2nd <- diag(length(index))
+        M.2nd[, index] <- M.foo[, index] %*% P.2nd  
+      }
+    }
+
+
+    tau.env.star <- crossprod(M.2nd, mu.star)
+    beta.env.star <- transformUnconditional(parm = tau.env.star, 
+      M.2nd, data, from = "tau", to = "beta", 
+      offset = offset)
+
+
+    # compute the envelope estimator of expected 
+    # Darwinian fitness
+    modmat.env.renew[, index] <- modmat.renew[,index] %*% P.2nd
+    mu.env.renew <- transformUnconditional(parm = beta.env.star, 
+      modmat.env.renew, data.renew, from = "beta", to = "mu", 
+      offset = offset.renew)
+    est.env.subsample[, j] <- (amat.mat %*% mu.env.renew)
+    M.2nd <- M.foo
+
+    # store the canonical statistic value
+    MLE.tau.boot.subsample[, j] <- tau.env.star
+
+    # compute the Efron sd estimator99i5
+    if(j == nboot2){ 
+
+      B <- t(MLE.tau.boot.subsample - rowSums(MLE.tau.boot.subsample)/nboot2)
+      V <- (t(B) %*% B) / nboot2;  eig.V <- eigen(V)
+      env.centered <- t(est.env.subsample - fit.foo)
+      cov <- t(B) %*% env.centered / nboot2
+
+      var.Efron <- t(cov) %*% eig.V$vec %*% diag(1/eig.V$val) %*% 
+        t(eig.V$vec) %*% cov
+      sd.Efron <- sqrt(diag(var.Efron))
+    }
+  }
+
+  ### output 
+  out <- list(sd.Efron = sd.Efron, cov = cov, V = V, 
+    MLE.tau.boot.subsample = MLE.tau.boot.subsample, 
+    est.env.subsample = est.env.subsample)
+  return(out)
+}
+```
+
+Version of combined TWO-LAYER bootstap all paralled using foreach and dosnow clustering method. Error occured as noted `transformUnconditional` around line 1000. This function would result in an error as it reached the second `transformUnconditional`(around line 1000 as in comment). The error would be with large numbers of nboot2(>5), Whereas calling the first layer bootstrap paralleled version(function name  `fitness_boot` in current markdown code) and then the 'secondboot' following the techreport does not generate error.
+
+Combined version of paralleled bootstrap function using lapply and foreach in `fit_boot_Efron-combined.R`, does not work as expected
+
+```{r fitboot par two layer function, echo=FALSE}
+fitness_boot2 <- function(model, nboot, index, vectors = NULL, dim = NULL,
+    data, amat, newdata, modmat.new = NULL, renewdata = NULL,
+    criterion = c("AIC","BIC","LRT"), alpha = 0.05, fit.name = NULL,
+    method = c("eigen","1d"), quiet = FALSE,corenum=NULL)
+{
+
+  # stopping condition
+  #stopifnot(!(is.null(vectors) & is.null(u)))
+  #stopifnot(!(is.null(fit.name) & is.null(renewdata)))
+  #timer <- proc.time()
+
+  # extract important envelope initial quantities
+  # obtain the target and nuisance parameters
+  # build U w.r.t. the target parameters
+  beta <- model$coef
+  x <- model$x
+  vars <- colnames(x)
+  code <- data$code
+  families <- data$families
+  fam <- model$fam
+  pred <- model$pred
+  root <- model$root
+  n <- nrow(x)
+  nnode <- ncol(x)
+  npop <- nrow(newdata) #same as nrow(env.boot.out)?
+  p <- length(beta)
+  formula <- model$formula
+  modmat.model <- model$modmat
+  modmat.mat <- matrix(modmat.model, nrow = n * nnode)
+  dimensions <- dim(modmat.model)
+  offset <- as.vector(model$origin)
+
+  # obtain tau
+  mu <- predict(model, parm.type = "mean.value",
+    model.type = "unconditional")
+  tau <- crossprod(modmat.mat, mu)
+  nuis.ind <- c(1:p)[!index]
+  k <- length(index)
+  target <- tau[index]
+
+  # obtain the projection used to construct the envelope
+  # estimator
+  avar <- (model$fisher)[index,index]
+  U <- P <- NULL; u <- length(index)
+  if(method == "eigen"){
+    u <- length(vectors)
+    eig <- eigen(avar, symmetric = TRUE)
+    G <- eig$vec[,c(vectors)]
+    P <- tcrossprod(G)
+  }
+  if(method == "1d"){
+    u <- dim
+    U <- target %o% target
+    G <- manifold1Dplus(M = avar, U = U, u = u)
+    P <- tcrossprod(G)
+  }
+
+  tau.env <- crossprod(P,target)
+  fulltau <- tau
+  fulltau[index] <- tau.env
+
+  # change the model matrix for the envelope estimator
+  modelmatrix.int <- modmat.mat
+  modelmatrix.int[, index] <- modelmatrix.int[, index] %*% P
+  modmat.model.int <- array(modmat.mat, dimensions)
+
+  # convert from tau to beta changed from fulltau to tau
+  beta.foo <- transformUnconditional(parm = fulltau,
+    modelmatrix.int, data, from = "tau", to = "beta",
+    offset = offset)
+
+  # set up for the bootstrap for the MLE
+  theta.hat2 <- predict(model, model.type = "cond",
+    parm.type = "canon")
+  theta.hat2 <- matrix(theta.hat2, nrow = n, ncol = nnode)
+  MLE.tau.boot <- matrix(nrow = npop, ncol = nboot[1]) # changed from nrow = p
+  b2 <- "try-error"; class(b2) <- "try-error"
+
+  # set up for the bootstrap for the envelope estimator
+  # (this envelope estimator corresponds to the selected method)
+  theta.hat <- transformUnconditional(parm = fulltau,
+    modelmatrix.int, data, from = "tau", to = "theta",
+    offset = offset)
+  theta.hat <- matrix(theta.hat, nrow = n, ncol = nnode)
+  #theta.hat <- theta.hat2
+  b <- "try-error"; class(b) <- "try-error"
+
+
+  # the array (matrix) that specifies Darwinian fitness
+  amat.mat <- NULL
+  if(is.matrix(amat)==TRUE){
+    amat.mat <- matrix(amat, nrow = npop,
+    byrow = TRUE)
+  }
+  if(is.matrix(amat)==FALSE){
+    amat.mat <- amat
+    #amat <- array(amat.mat, dim = c(npop, nnode, p))
+  }
+
+
+  # initial quantities
+  est <- est2 <- matrix(0, ncol = npop)
+  env.tau.boot <- matrix(0, ncol = p)
+  P.list <-  NULL
+  class(P.list) <- class(P.list) <- "list"
+  vectors.list  <- NULL
+  class(vectors.list)  <- "list"
+  out <- NULL
+  table <- NULL
+
+
+  #modmat.renew <- model.matrix(m1$formula, data = renewdata)
+  cond <- !(colnames(modmat.new) %in% model$dropped)
+  modmat.new <- modmat.new[, cond]
+  M1.renew <- t(modmat.new[,-index])
+  M2.renew <- P %*% t(modmat.new[,index])
+  modmat.env.renew <- t(rbind(M1.renew,M2.renew))
+  data.renew <- asterdata(newdata, vars = vars, pred = pred,
+    group = rep(0, length(vars)), code = code,
+    families = families)
+  origin.renew <- model$origin[1:npop,]
+  offset.renew <- as.vector(origin.renew)
+
+  # fit the aster model using different methods
+
+  check_error = function(class, modmat_status=modmat.model) {
+    if(class == "try-error"){
+      class <- class(try(aout4star2 <- aster(xstar2, root, pred,
+        fam, modmat_status, parm = beta,
+        method = "nlm"), silent = TRUE))[1]
+    }
+
+    if(class == "try-error"){
+      class <- class(try( aout4star2 <- aster(xstar2, root,
+        pred, fam, modmat_status), silent = TRUE))[1]
+    }
+
+    if(class == "try-error"){
+      class<- class(try(aout4star2 <- aster(xstar2, root, pred,
+        fam, modmat_status, method = "nlm"), silent = TRUE))[1]
+    }
+    return(class)
+  }
+  method_check = function(method, tau, index, model, data, alpha) {
+    result = 0
+    if (method == "1d") {
+      barbaz <- envlpaster::selection(tau, index, model, data,
+        alpha = alpha, type = "mean-value", method = "1d")
+      if(criterion == "AIC") result <- barbaz$aic
+      if(criterion == "BIC") result <- barbaz$bic
+      if(criterion == "LRT") result <- barbaz$LRT
+    }
+    if(method == "eigen"){
+      fubar <- envlpaster::selection(tau, index, model, data,
+        alpha = alpha, type = "mean-value", method = "eigen")
+      if(criterion == "AIC") result <- fubar$aic
+      if(criterion == "BIC") result <- fubar$bic
+      if(criterion == "LRT") result <- fubar$LRT
+    }
+    return(result)
+  }
+
+
+  #list of vars and functs that need to be move into the parallel from global
+  cl <- makeCluster(corenum*2,type="SOCK")
+  registerDoSNOW(cl)
+  clusterExport(cl, c('check_error','method_check','theta.hat2',
+    'pred', 'fam', 'root','modmat.model','beta',
+    'modmat.mat','offset','amat.mat','vectors.list',
+    'MLE.tau.boot','est2','b2', 'offset.renew','index','method','data','data.renew','alpha',
+    'modmat.new','modmat.model.int','n','nnode','vectors'),
+    envir=environment())
+  clusterEvalQ(cl,library("aster2","envlpaster","aster"))
+  resultlist<-foreach(k=1:nboot[1]) %dopar%{
+
+    # fit the aster model to the resampled data obtained from
+    # the MLE of theta
+    xstar2 <-aster::raster(theta.hat2, pred, fam, root)
+  # fit the aster model to the resampled data obtained from
+    # the MLE of theta
+    class(b2) <- class(try(aout4star2 <-aster::aster(xstar2, root, pred,
+      fam, modmat.model, parm = beta), silent = TRUE))[1]
+    class(b2) <- check_error(class(b2))
+    # MLE of expected Darwinian fitness
+    tau.renew <- transformUnconditional(aout4star2$coef, data,
+      modmat = modmat.mat, from = "beta", to = "tau",
+      offset = offset)
+    phi.MLE.renew <- offset.renew + modmat.new %*% aout4star2$coef
+    mu.MLE.renew <- transformSaturated(parm = phi.MLE.renew,
+      data.renew, from = "phi", to = "mu")
+    MLE.tau.boot <- tau.renew
+    est2 <- amat.mat %*% mu.MLE.renew #Dar.fit.MLE
+    # selection of the envelope eigenstructure
+    vectors.list = method_check(method, tau = tau.renew, index=index, model=aout4star2, data=data, alpha=alpha)
+    dim.1d=0
+    if (method=="1d") {
+      dim.1d=vectors.list
+    }
+
+    # get the bootstrapped envelope estimators
+    M <- matrix(modmat.model.int, nrow = n * nnode)
+    avar.star <- (aout4star2$fisher)[index,index]
+    beta.env.star <- aout4star2$coef
+    mu.star <- predict(aout4star2, parm.type = "mean.value",
+      model.type = "unconditional")
+    modelmatrix.star <- M
+
+    tau.env.star <- crossprod(modelmatrix.star, mu.star)
+    env.tau.boot <- tau.env.star
+
+    # envelope estimator of expected Darwinian fitness using
+    # eigenstructures
+    if(method == "eigen"){
+      G.star <- eigen(avar.star, symmetric = TRUE)$vec[,c(vectors)]
+      P.star <- tcrossprod(G.star)
+      P.list <- P.star
+      modelmatrix.star[, index] <- modelmatrix.star[, index] %*% P.star
+      M1.renew <- t(modmat.new[,-index])
+      M2.renew <- P.star %*% t(modmat.new[,index])
+      modmat.env.renew <- t(rbind(M1.renew,M2.renew))
+    }
+
+    # envelope estimator of expected Darwinian fitness using the
+    # 1d algorithm
+    if(method == "1d"){
+      if(vectors.list < length(index)){
+        up.env.star <- crossprod(M, mu.star)[index]
+        U.star <- up.env.star %o% up.env.star
+        G.star <- manifold1Dplus(avar.star, U = U.star, u = dim.1d)
+        P.star <- tcrossprod(G.star)
+        P.list[k] <- P.star
+
+        modelmatrix.star[, index] <- modelmatrix.star[, index] %*% P.star
+        beta.env.star <- transformUnconditional(parm = tau.env.star,
+          modelmatrix.star, data, from = "tau", to = "beta",
+          offset = offset)
+        modmat.env.renew <- modmat.new
+
+      }
+      if(dim.1d == length(index)){
+        P.list <- diag(length(index))
+        env.tau.boot<- tau.renew
+      }
+      if(dim.1d == length(index)){
+        env.tau.boot<- tau.renew
+      }
+    }
+    # P.list
+    # env.tau.boot
+    beta.env.star <- transformUnconditional(parm = tau.env.star,
+        modelmatrix.star, data, from = "tau", to = "beta",
+        offset = offset)
+    modmat.env.renew[, index] <- modmat.env.renew[, index] %*% P.star
+        mu.env.renew <- transformUnconditional(parm = beta.env.star,
+    modmat.env.renew, data.renew, from = "beta", to = "mu",
+          offset = offset.renew)
+
+    # the stored expected Darwinian fitness estimates
+    est<- amat.mat %*% mu.env.renew
+    list(est,
+         est2,
+         MLE.tau.boot,
+        env.tau.boot,
+        P.list,
+        vectors.list)
+  }
+  stopImplicitCluster()
+  stopCluster(cl)
+  env.boot.out=do.call(cbind, lapply(1:nboot[1], function(j){
+    unlist(resultlist[[j]][1])
+  }))
+   MLE.boot.out=do.call(cbind, lapply(1:nboot[1], function(j){
+    unlist(resultlist[[j]][2])
+  }))
+  MLE.tau.boot=do.call(cbind, lapply(1:nboot[1], function(j){
+    unlist(resultlist[[j]][3])
+  }))
+  env.tau.boot=do.call(cbind, lapply(1:nboot[1], function(j){
+    unlist(resultlist[[j]][4])
+  }))
+   P.list=do.call('c', lapply(1:nboot[1], function(j){
+    resultlist[[j]][5]
+  }))
+  vectors.list=do.call('c', lapply(1:nboot[1], function(j){
+    resultlist[[j]][6]
+  }))
+  # out<-list( env.boot.out = env.boot.out, MLE.boot.out = MLE.boot.out, MLE.tau.boot = MLE.tau.boot,
+  #       env.tau.boot = env.tau.boot,
+  #       P.list = P.list,
+  #       vectors.list = vectors.list)
+  cl<- NULL
+
+  #secondboot
+  ##########################################################################
+  ##########################################################################
+  ##########################################################################
+
+  # necessary components from the top-level of
+  # bootstrapping
+  # all outout from 1st boot strap
+ 
+
+  # specify necessary quantities for secondboot function
+  # variables decleared above:
+  # beta, model(auto4star2), n, p, nnode, modmat.mat, mu
+  # offset, code, familes, vars, fam, pred, root
+
+  # necessary for trial run
+  cov <- V <- var.Efron <- NULL
+  MLE.tau.boot.subsample <- NULL
+  est.env.subsample <- NULL
+
+  # the array (matrix) that specifies Darwinian fitness
+  amat.mat <- NULL
+  if(is.matrix(amat)==FALSE){
+    amat.mat <- matrix(amat, nrow = npop,
+    byrow = TRUE)
+  }
+  if(is.matrix(amat)==TRUE){
+    amat.mat <- amat
+    #amat <- array(amat.mat, dim = c(npop2, nnode, p))
+  }
+  # setup of model matrices and asterdata object
+  # obtained from top level of bootstrapping
+  cond <- !(colnames(modmat.new) %in% model$dropped)
+  modmat.new <- modmat.env.renew <- modmat.new[, cond]
+  
+  data.renew <- asterdata(newdata, vars = vars, pred = pred,
+                          group = rep(0, length(vars)), code = code,
+                          families = families)
+  origin.renew <- model$origin[1:npop,]
+  offset.renew <- as.vector(origin.renew)
+
+  #initialize quantities independent of k(RESULT LIST)
+  r <- length(index)
+  U.2nd <- P.2nd <- Sigma.uu <- matrix(0, r, r)
+  aout4star2 <- b2 <- model
+  #est.env.subsample <- matrix(0, nrow = npop2, ncol = nboot[2])
+  #MLE.tau.boot.subsample <- matrix(0, nrow = p, ncol = nboot[2])
+  sd.Efron <- 0
+
+  ######################################################################
+  #end of values independent of k, the iter number
+  
+  cl <- makeCluster(corenum*2,type="SOCK")
+  registerDoSNOW(cl)
+  clusterExport(cl, c('raster','projection',
+    'pred', 'fam', 'root','beta',
+    'model','aster','r','vectors.list','modmat.mat','modmat.env.renew','modmat.new', 'MLE.tau.boot','P.list','env.boot.out',
+    'P.2nd','U.2nd','data','offset','offset.renew',
+    'data.renew','index','amat.mat','nboot','npop','p','method','env.tau.boot','n','nnode','b2','aout4star2'),
+    envir=environment())
+  clusterEvalQ(cl,library("aster2","envlpaster","aster"))
+  resultlist2 <- foreach(k=1:nboot[1]) %dopar%{
+    # initialize important quantities
+    #involving k(iteration number)
+    P.foo <- M.foo <- fit.foo <- foo <- NULL
+    vectors.foo <- u <- NULL
+
+    if(method == "eigen"){
+      foo <- env.tau.boot[, k]
+      vectors.foo <- vectors.list[[k]]
+      u <- length(vectors.foo)
+      P.foo <- P.list[[k]]
+      M.foo <- modmat.mat; M.foo[, index] <- M.foo[, index] %*% P.foo
+      fit.foo <- rowSums(env.boot.out) / nboot[1]
+    }
+
+    if(method == "1d"){
+      u <- vectors.list[[k]]
+      fit.foo <- rowSums(env.boot.out) / nboot[1]
+      if(u == length(index)){
+        foo <- MLE.tau.boot[, k]
+        P.foo <- P.list[[k]]
+        M.foo <- modmat.mat
+      }
+      if(u < length(index)){
+        foo <- env.tau.boot[, k]
+        P.foo <- P.list[[k]]
+        M.foo <- modmat.mat; M.foo[, index] <- M.foo[, index] %*% P.foo
+      }
+    }
+    modmat.env.renew[, index] <-modmat.env.renew[, index] %*% P.foo
+
+    # theta values
+    theta.samp <- transformUnconditional(foo, M.foo, data,
+                                        from = "tau", to = "theta", offset = offset)
+    theta.samp <- matrix(theta.samp, nrow = n, ncol = nnode)
+
+    # initial quantities dependent of k
+    M.2nd <- M.foo#check if could be simplified
+    Gamma.2nd <- matrix(0, nrow = r, ncol = u)
+    
+    #est.env.subsample<- matrix(0, nrow = npop2, ncol = nboot[2])
+    #MLE.tau.boot.subsample <- matrix(0, nrow = p, ncol = nboot[2])
+    rlist = NULL
+    mle.tao.list = NULL
+    #Generate new samples
+    for(j in 1:nboot[2]){
+
+      xstar.samp <- raster(theta.samp, pred, fam, root)
+
+      # fit the aster model using the secondary generated data
+      class(b2) <- class(try(aout4star2 <- aster(xstar.samp, root,
+                                                pred, fam, model$modmat, parm = beta), silent = TRUE))[1]
+
+      if(class(b2) == "try-error"){
+        class(b2) <- class(try(aout4star2 <- aster(xstar.samp, root, pred,
+                                                  fam, model$modmat, parm = beta,
+                                                  method = "nlm"), silent = TRUE))[1]
+      }
+
+      if(class(b2) == "try-error"){
+        class(b2) <- class(try( aout4star2 <- aster(xstar.samp, root,
+                                                    pred, fam, model$modmat), silent = TRUE))[1]
+      }
+
+      if(class(b2) == "try-error"){
+        class(b2) <- class(try(aout4star2 <- aster(xstar.samp, root, pred,
+                                                  fam, model$modmat, method = "nlm"), silent = TRUE))[1]
+      }
+
+
+      # get tau and mu from this fit
+      mu.star <- predict(aout4star2, parm.type = "mean.value",
+                        model.type = "unconditional")
+
+      # get beta and tau using the model matrix containing
+      # the projection into the envelope
+      Sigma.uu <- aout4star2$fisher[index, index]
+      if(method == "eigen"){
+        if(length(vectors.foo) < length(index)){
+          Gamma.2nd <- eigen(Sigma.uu, symmetric = TRUE)$vec[, vectors.foo]
+          P.2nd <- projection(Gamma.2nd)
+          M.2nd[, index] <- M.2nd[, index] %*% P.2nd
+        }
+        if(length(vectors.foo) == length(index)){
+          M.2nd <- M.foo
+        }
+      }
+      if(method == "1d"){
+        if(u < length(index)){
+          tau.star <- crossprod(M.foo, mu.star)
+          U.2nd <- tau.star[index] %*% t(tau.star[index])
+          Gamma.2nd <- manifold1Dplus(Sigma.uu, U = U.2nd, u = u)
+          P.2nd <- tcrossprod(Gamma.2nd)
+        }
+        if(u == length(index)){
+          P.2nd <- diag(length(index))
+          M.2nd[, index] <- M.foo[, index] %*% P.2nd
+        }
+      }
+
+
+      tau.env.star <- crossprod(M.2nd, mu.star)
+      beta.env.star <- transformUnconditional(parm = tau.env.star,
+                                              M.2nd, data, from = "tau", to = "beta",
+                                              offset = offset)#!!!
+      
+    #check
+      # compute the envelope estimator of expected
+      # Darwinian fitness
+      modmat.env.renew[, index] <- modmat.new[,index] %*% P.2nd
+      print("parm=")
+      print(beta.env.star)
+      print("modmat=")
+      print(modmat.env.renew)
+      print('data')
+      print(data.renew)
+      print("offset")
+      print(offset.renew)
+      mu.env.renew <- transformUnconditional(parm = beta.env.star,
+                                            modmat.env.renew,#M.2nd#, data.renew, from = "beta", to = "mu",
+                                            offset = offset.renew) #!!
+      
+      #appeared infinite when using nboot=c(10,10) error:Error in { : task 10 failed - "is.finite(theta) are not all TRUE"
+      rlist = c(rlist,list(beta.env.star,modmat.env.renew))
+      mle.tao.list = cbind(mle.tao.list,tau.env.star)
+      # compute the Efron sd estimator99i5
+      
+    }
+    list(rlist,mle.tao.list,fit.foo)
+    #list(est.env.subsample =est.env.subsample, MLE.tau.boot.subsample = tau.env.star, fit.foo)
+  }
+  stopImplicitCluster()
+  stopCluster(cl)
+
+  return(resultlist2)
+}
+```
+
+
+
+
+Setup code for testing the bootstrap
+```{r read data}
+data(Mguttatus)
+```
+
+
+```{r read vars}
+data <- Mguttatus
+redata <- Mguttatus.redata
+vars <- quantities$vars
+pred <- quantities$pred
+group <- quantities$group
+code <- quantities$code
+fam <- quantities$fam
+nnode <- length(vars)
+n <- nrow(redata) / nnode
+families <- quantities$families
+root <- redata$root
+fit <- redata$fit
+varvar <- quantities$varvar
+idvar <- quantities$idvar
+```
+
+
+```{r load file}
+load("main-all-terms-DavidLowrydata.RData")
+
+```
+
+
+
+```{r setup astermodel}
+m.main <- aster(resp ~ varb + fit:(gen_bac + site +
+inversion + type), pred, fam, varvar = varvar,
+idvar = idvar, data = redata, root = root)
+
+```
+```{r setup2}
+target <- which(grepl("fit", names(m.main$coef)))
+avar.targ <- m.main$fisher[target, target]
+modmat.mat <- matrix(m.main$modmat, nrow = n*nnode)
+tau <- crossprod(modmat.mat, redata$resp)
+tau.targ <- tau[target]
+beta <- m.main$coef
+p <- length(beta)
+```
+
+```{r setup3}
+foo <- selection(tau, target, m.main, data, type = "mean-value",method = "eigen", alpha = 0.01)
+```
+
+
+```{r setup4}
+a <- levels(test$gen_bac)
+b <- levels(test$site)
+c <- levels(test$inversion)
+d <- levels(test$type)
+fred <- expand.grid(a = a, b = b, c = c, d = d)
+colnames(fred) <- c("gen_bac","site","inversion","type")
+fred$sur_flw <- 1
+fred$flws <- 1
+renewdata <- reshape(fred, varying = list(vars),
+                     direction = "long", timevar = "varb",
+                     times = as.factor(vars), v.names = "resp")
+fit.renew <- as.numeric(grepl("flws", renewdata$varb))
+renewdata$fit <- fit.renew
+renewdata$root <- 1
+npop <- nrow(fred)
+modmat.renew <- model.matrix(m.main$formula, data = renewdata)
+modmat.renew[, 2] <- 1 - modmat.renew[, 2]
+index <- !(colnames(modmat.renew) %in% m.main$dropped)
+modmat.renew <- modmat.renew[, index]
+amat <- matrix(0, nrow = npop, ncol = nnode * npop)
+```
+
+
+```{r setup5}
+for(j in 1:npop){ 
+  amat[j, npop + j] =amat[j, npop + j]
+}
+```
+
+
+Fitting the model, change `fitness_boot` to `fitness_boot2` would change calculation to two-layer parelled bootstap.
+```{r test out,warning=FALSE}
+m3 <- fitness_boot(model = m.main, nboot = c(100,10), index = target,
+                     vectors = foo$bic, data = data, amat = amat, newdata = fred,
+                     modmat.new = modmat.renew, renewdata = renewdata,
+                     criterion = "BIC", method = "eigen", quiet = FALSE,corenum =4)
+```
+
+
+
+<!-- Attempt to take out the result from 1st bootstrap(result from `fitness_bot`) and manually tried second bootstrap for output -->
+<!-- ```{r, eval=FALSE, echo=FALSE} -->
+<!--    env.sum<- matrix(0,npop, nboot[2]) -->
+<!--   sd.Efron.mean <- rep(0, npop) -->
+
+<!--   for (i in 1:nboot[1]){ -->
+<!--     resultlist2[[i]][[1]]=matrix(resultlist2[[i]][[1]], ncol = nboot[2]) -->
+<!--     resultlist2[[i]][[1]] =amat.mat%*%resultlist2[[i]][[1]]  -->
+<!--     env.sum = env.sum+resultlist2[[i]][[1]] -->
+
+<!--     B <- t(resultlist2[[i]][[2]] - rowSums(resultlist2[[i]][[2]])/nboot[2]) -->
+<!--     V <- (t(B) %*% B) / nboot[2];  eig.V <- eigen(V) -->
+<!--     env.centered <- t(resultlist2[[i]][[1]] - resultlist2[[i]][[3]]) -->
+<!--     cov <- t(B) %*% env.centered / nboot[2] -->
+<!--     var.Efron <- t(cov) %*% eig.V$vec %*% diag(1/eig.V$val) %*% -->
+<!--       t(eig.V$vec) %*% cov -->
+<!--     sd.Efron <- sqrt(diag(var.Efron)) -->
+
+<!--     sd.Efron.mean = sd.Efron.mean + sd.Efron/nboot[1] -->
+<!--   } -->
+<!--   mu.renew <- transformUnconditional(beta, data.renew, -->
+<!--                                      modmat = modmat.renew, from = "beta", to = "mu", -->
+<!--                                      offset = offset.renew) #from the second bootstrap, using npop2 -->
+<!--   fit <- amat%*% mu.renew -->
+<!--   dev<-MLE.boot.out-as.vector(fit) -->
+<!--   mle.sum = (dev[, i] %*% t(dev[, i])) -->
+<!--   for (i in 2:nboot[1]){ -->
+<!--     mle.sum <- mle.sum + (dev[, i] %*% t(dev[, i])) -->
+<!--   } -->
+<!--   sd.MLE <- sqrt(diag(mle.sum) / (nboot[1] - 1)) -->
+<!--   env.sum = env.sum/nboot[1] -->
+<!--   ratio <- sd.MLE / sd.Efron.mean -->
+<!--   final_list = list(env.sum,sd.Efron.mean,fit,mle.sum,ratio, resultlist2,env.boot.out) -->
+<!-- ``` -->
+
+
+
+
+
+
+
